@@ -1,0 +1,128 @@
+import type { VehicleJourneyLineType } from "@bus-tracker/contracts";
+import { mutationOptions, queryOptions } from "@tanstack/react-query";
+
+import { client } from "~/api/client";
+import type { Operator } from "~/api/networks";
+
+export const vehicleArchiveReasons = ["FAILURE", "FIRE", "RETIRED", "SOLD", "TRANSFER", "OTHER"] as const;
+export type VehicleArchiveReason = (typeof vehicleArchiveReasons)[number];
+
+export type Vehicle = {
+	id: number;
+	networkId: number;
+	operatorId: number | null;
+	operator: Operator | null;
+	ref: string;
+	number: string;
+	type: VehicleJourneyLineType;
+	designation: string | null;
+	tcId: number | null;
+	archivedAt: string | null;
+	archivedFor: VehicleArchiveReason | null;
+	activity: VehicleActivity;
+};
+
+export type UpdateVehicleData = {
+	number: string;
+	designation: string | null;
+	tcId: number | null;
+	type: VehicleJourneyLineType;
+	operatorId: number | null;
+};
+
+export type ArchiveVehicleData = {
+	reason: VehicleArchiveReason | null;
+	wipeReference: boolean;
+	archivedAt?: string | null;
+};
+
+export type VehicleWithActiveMonths = Vehicle & {
+	activeMonths: string[];
+};
+
+export type VehicleActivity = {
+	status: "online" | "offline";
+	since: string | null;
+	lineId?: number;
+	markerId?: string;
+	position?: { latitude: number; longitude: number };
+};
+
+export type VehicleTimeline = {
+	timeline: VehicleTimelineDay[];
+};
+
+export type VehicleTimelineDay = {
+	date: string;
+	activities: VehicleTimelineDayActivity[];
+};
+
+export type VehicleTimelineDayActivity = {
+	type: "LINE_ACTIVITY";
+	lineId: number;
+	startedAt: string;
+	updatedAt: string;
+};
+
+export const GetVehiclesQuery = (networkId?: number) =>
+	queryOptions({
+		enabled: typeof networkId !== "undefined",
+		queryKey: ["network-vehicles", networkId],
+		queryFn: () => {
+			const params = new URLSearchParams();
+			if (typeof networkId === "number") {
+				params.append("networkId", networkId.toString());
+			}
+			return client.get(`vehicles?${params}`).then((response) => response.json<Vehicle[]>());
+		},
+		select: (data) => data.sort((a, b) => +a.number - +b.number),
+		refetchInterval: 20_000,
+	});
+
+export const GetVehicleQuery = (vehicleId: number) =>
+	queryOptions({
+		refetchInterval: 20_000,
+		queryKey: ["vehicles", vehicleId],
+		queryFn: () => client.get(`vehicles/${vehicleId}`).then((response) => response.json<VehicleWithActiveMonths>()),
+	});
+
+export const GetVehicleActivitiesQuery = (vehicleId: number, month?: string) =>
+	queryOptions({
+		queryKey: ["vehicles", vehicleId, "activities", month],
+		queryFn: () => {
+			const params = new URLSearchParams();
+			if (month) params.append("month", month);
+			return client
+				.get(`vehicles/${vehicleId}/activities?${params.toString()}`)
+				.then((response) => response.json<VehicleTimeline>());
+		},
+	});
+
+export const UpdateVehicleMutation = (vehicleId: number) =>
+	mutationOptions({
+		mutationFn: async ({ token, json }: { token: string; json: UpdateVehicleData }) => {
+			await client.put(`vehicles/${vehicleId}`, {
+				headers: { "X-Editor-Token": token },
+				json,
+			});
+		},
+	});
+
+export const ArchiveVehicleMutation = (vehicleId: number) =>
+	mutationOptions({
+		mutationFn: async ({ token, json }: { token: string; json: ArchiveVehicleData }) => {
+			await client.post(`vehicles/${vehicleId}/archive`, {
+				headers: { "X-Editor-Token": token },
+				json,
+			});
+		},
+	});
+
+export const UnarchiveVehicleMutation = (vehicleId: number) =>
+	mutationOptions({
+		mutationFn: async ({ token }: { token: string }) => {
+			await client.post(`vehicles/${vehicleId}/unarchive`, {
+				headers: { "X-Editor-Token": token },
+			});
+		},
+	});

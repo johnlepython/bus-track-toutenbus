@@ -1,0 +1,267 @@
+import { Label } from "@radix-ui/react-label";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import clsx from "clsx";
+import { ArchiveIcon, BinaryIcon, ClockIcon, FilterIcon, SortAscIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
+import { useDebounceValue } from "usehooks-ts";
+
+import { GetNetworkQuery } from "~/api/networks";
+import { GetVehiclesQuery, type Vehicle } from "~/api/vehicles";
+import { VehiclesTable } from "~/components/data/vehicles/vehicles-table";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { BusIcon, CoachIcon, ShipIcon, TramwayIcon, TrolleybusIcon } from "~/icons/means-of-transport";
+import { cn } from "~/utils/utils";
+
+const vehicleTypeOptions = {
+	ALL: {
+		label: <span className="text-muted-foreground">Type</span>,
+		icon: null,
+	},
+	TRAMWAY: {
+		label: "Tramway",
+		icon: <TramwayIcon className="size-5" />,
+	},
+	TROLLEY: {
+		label: "Trolleybus",
+		icon: <TrolleybusIcon className="size-5" />,
+	},
+	BUS: {
+		label: "Bus",
+		icon: <BusIcon className="size-5" />,
+	},
+	COACH: {
+		label: "Car",
+		icon: <CoachIcon className="size-5" />,
+	},
+	FERRY: {
+		label: "Ferry",
+		icon: <ShipIcon className="size-5" />,
+	},
+};
+
+const sortingOptions = {
+	number: {
+		label: "Numéro",
+		icon: <BinaryIcon className="size-5" />,
+	},
+	activity: {
+		label: "Activité",
+		icon: <ClockIcon className="size-5" />,
+	},
+};
+
+const numberSort = (a: Vehicle, b: Vehicle) => {
+	const numberifiedA = parseInt(a.number, 10);
+	const numberifiedB = parseInt(b.number, 10);
+
+	if (Number.isNaN(numberifiedA)) {
+		if (Number.isNaN(numberifiedB)) {
+			return a.number.localeCompare(b.number);
+		}
+		return 1;
+	}
+
+	if (Number.isNaN(numberifiedB)) {
+		return -1;
+	}
+	return numberifiedA - numberifiedB;
+};
+
+type NetworkVehiclesProps = {
+	networkId: number;
+};
+
+export function NetworkVehicles({ networkId }: NetworkVehiclesProps) {
+	const [showArchived, setShowArchived] = useState(false);
+
+	const { data: network } = useSuspenseQuery(GetNetworkQuery(networkId, true, true));
+	const { data: vehicles } = useSuspenseQuery(GetVehiclesQuery(networkId));
+
+	const hasArchivedVehicles = useMemo(() => vehicles.some((vehicle) => vehicle.archivedAt !== null), [vehicles]);
+
+	const availableNetworkTypeFilters = useMemo(() => {
+		const networkVehicleTypes = new Set(vehicles.map(({ type }) => type));
+		return [
+			"ALL",
+			...Object.keys(vehicleTypeOptions).filter((type) => networkVehicleTypes.has(type as Vehicle["type"])),
+		];
+	}, [vehicles]);
+
+	const [searchParams, setSearchParams] = useSearchParams("");
+
+	const updateSearchParam = (key: string, value: string) => {
+		setSearchParams((searchParams) => {
+			const newSearchParams = new URLSearchParams(searchParams);
+			newSearchParams.set(key, value);
+			return newSearchParams;
+		});
+	};
+
+	const type = searchParams.get("type") ?? "ALL";
+	const operatorId = searchParams.get("operatorId") ?? "ALL";
+	const filter = searchParams.get("filter") ?? "";
+	const sort = searchParams.get("sort") ?? "number";
+
+	const [debouncedFilter] = useDebounceValue(() => filter, 100);
+
+	const filteredAndSortedVehicles = useMemo(() => {
+		const sort = searchParams.get("sort");
+		let pattern: RegExp | string = debouncedFilter;
+
+		try {
+			pattern = new RegExp(debouncedFilter.replaceAll("_", "\\d"), "i");
+		} catch {}
+
+		return vehicles
+			.filter((v) => {
+				if (showArchived && v.archivedAt === null) return false;
+				if (!showArchived && v.archivedAt !== null) return false;
+				if (type?.trim().length && type !== "ALL" && v.type !== type) return false;
+				if (operatorId !== "" && operatorId !== "ALL" && +operatorId !== v.operatorId) return false;
+				if (debouncedFilter === "") return true;
+				return pattern instanceof RegExp
+					? pattern.test(v.number.toString()) || pattern.test(v.designation ?? "")
+					: v.number.toString().includes(pattern);
+			})
+			.sort((a, b) => {
+				if (sort === "activity") {
+					if (typeof a.activity.lineId !== "undefined" && typeof b.activity.lineId !== "undefined")
+						return numberSort(a, b);
+					if (typeof a.activity.lineId === "number") return -1;
+					if (typeof b.activity.lineId === "number") return 1;
+					if (a.activity.since === null) return 1;
+					if (b.activity.since === null) return -1;
+					return b.activity.since.localeCompare(a.activity.since);
+				}
+
+				return numberSort(a, b);
+			});
+	}, [debouncedFilter, operatorId, showArchived, searchParams, type, vehicles]);
+
+	const onlineVehicles = useMemo(
+		() => filteredAndSortedVehicles.filter(({ activity }) => typeof activity.lineId !== "undefined"),
+		[filteredAndSortedVehicles],
+	);
+
+	const activeVehiclesLabel = useMemo(() => {
+		if (showArchived)
+			return `${filteredAndSortedVehicles.length} véhicule${filteredAndSortedVehicles.length > 1 ? "s" : ""} archivé${filteredAndSortedVehicles.length > 1 ? "s" : ""}`;
+		if (filteredAndSortedVehicles.length === 0) return "Aucun véhicule n'existe avec ces critères de recherche";
+		if (onlineVehicles.length === 0) return `Aucun véhicule sur ${filteredAndSortedVehicles.length} en circulation`;
+		return `${onlineVehicles.length}/${filteredAndSortedVehicles.length} véhicule${filteredAndSortedVehicles.length > 1 ? "s" : ""} en circulation`;
+	}, [filteredAndSortedVehicles, onlineVehicles, showArchived]);
+
+	return (
+		<div>
+			{" "}
+			<div
+				className={cn("grid gap-1", hasArchivedVehicles ? "grid-cols-[1fr_4.5rem_2.3rem]" : "grid-cols-[1fr_4.5rem]")}
+			>
+				{/* Filters */}
+				<div className="flex flex-col gap-1">
+					<Label className="inline-flex items-center gap-1" htmlFor="filter">
+						<FilterIcon size={16} /> Filtrer par
+					</Label>
+					<div className="flex gap-1">
+						{availableNetworkTypeFilters.length > 2 && (
+							<Select value={type} onValueChange={(newType) => updateSearchParam("type", newType)}>
+								<SelectTrigger aria-label="Type" className="h-10 w-18">
+									<SelectValue>
+										{vehicleTypeOptions[type as keyof typeof vehicleTypeOptions].icon ?? vehicleTypeOptions.ALL.label}
+									</SelectValue>
+								</SelectTrigger>
+								<SelectContent>
+									{availableNetworkTypeFilters.map((type) => {
+										const item = vehicleTypeOptions[type as keyof typeof vehicleTypeOptions];
+										return (
+											<SelectItem key={type} value={type}>
+												<div className="flex items-center gap-2">
+													{item.icon}
+													<span>{item.label}</span>
+												</div>
+											</SelectItem>
+										);
+									})}
+								</SelectContent>
+							</Select>
+						)}
+						<div className="flex flex-1 gap-1 max-w-96">
+							{network.operators.length > 0 && (
+								<Select
+									value={operatorId}
+									onValueChange={(newOperatorId) => updateSearchParam("operatorId", newOperatorId)}
+								>
+									<SelectTrigger aria-label="Opérateur" className="h-10 w-1/2">
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectItem value="ALL">
+											<span className="text-muted-foreground">Opérateur</span>
+										</SelectItem>
+										{network.operators
+											.toSorted((a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name))
+											.map((operator) => (
+												<SelectItem key={operator.id} value={operator.id.toString()}>
+													{operator.name}
+												</SelectItem>
+											))}
+									</SelectContent>
+								</Select>
+							)}
+							<Input
+								className="h-10 w-1/2"
+								placeholder="numéro ou désignation"
+								value={searchParams.get("filter") ?? ""}
+								onChange={(e) => updateSearchParam("filter", e.target.value)}
+							/>
+						</div>
+					</div>
+				</div>
+				{/* Sort */}
+				<div className="flex flex-col gap-1">
+					<Label className="inline-flex items-center gap-1" htmlFor="sort">
+						<SortAscIcon size={16} /> Tri
+					</Label>
+					<Select value={sort} onValueChange={(newSort) => updateSearchParam("sort", newSort)}>
+						<SelectTrigger aria-label="Trier" className="h-10">
+							<SelectValue>{sortingOptions[sort as keyof typeof sortingOptions].icon}</SelectValue>
+						</SelectTrigger>
+						<SelectContent>
+							{Object.entries(sortingOptions).map(([key, item]) => (
+								<SelectItem key={key} value={key}>
+									<div className="flex items-center gap-2">
+										{item.icon}
+										<span>{item.label}</span>
+									</div>
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+				{/* Archive */}
+				{hasArchivedVehicles && (
+					<Button
+						className="mt-auto h-10"
+						onClick={() => setShowArchived(!showArchived)}
+						size="icon"
+						variant={showArchived ? "branding-default" : "secondary"}
+					>
+						<ArchiveIcon />
+					</Button>
+				)}
+			</div>
+			<p
+				className={clsx(
+					"text-muted-foreground text-sm",
+					filteredAndSortedVehicles.length > 0 ? "mt-2 text-end" : "mt-5 text-center",
+				)}
+			>
+				{activeVehiclesLabel}
+			</p>
+			<VehiclesTable data={filteredAndSortedVehicles} searchParams={searchParams} />
+		</div>
+	);
+}

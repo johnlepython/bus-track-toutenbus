@@ -1,0 +1,24 @@
+{
+	"name": "bus-tracker",
+	"description": "Application for tracking public transport vehicles.",
+	"author": "Kevin BIOJOUT <coucou@kevinbioj.fr>",
+	"license": "GPL-3.0-only",
+	"scripts": {
+		"dev:client": "pnpm -C apps/client dev",
+		"dev:server": "pnpm -C apps/server dev",
+		"dev:dkbus": "pnpm -C providers/dkbus dev",
+		"dev:flowly": "pnpm -C providers/flowly dev",
+		"dev:idelis": "pnpm -C providers/idelis dev",
+		"dev:gtfs": "pnpm -C providers/gtfs dev",
+		"dev:hawk": "pnpm -C providers/hawk dev",
+		"dev:twisto": "pnpm -C providers/twisto dev",
+		"dev:tcl": "pnpm -C providers/tcl dev",
+		"dev:rtm": "pnpm -C providers/rtm dev",
+		"lint": "biome lint",
+		"format": "biome format --write"
+	},
+	"packageManager": "pnpm@10.30.3+sha512.c961d1e0a2d8e354ecaa5166b822516668b7f44cb5bd95122d590dd81922f606f5473b6d23ec4a5be05e7fcd18e8488d47d978bbe981872f1145d06e9a740017",
+	"devDependencies": {
+		"@biomejs/biome": "2.4.5"
+	}
+}

@@ -1,0 +1,45 @@
+FROM node:25.8.0-alpine AS base
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+WORKDIR /bus-tracker
+
+##########################################
+# STAGE 1 - Build project artifacts      #
+##########################################
+
+FROM base AS builder
+RUN npm install -g --force corepack@latest
+RUN corepack enable
+
+# Fetch dependencies
+# COPY patches/ ./patches/
+COPY pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm fetch
+
+# Install dependencies
+COPY libraries/contracts/ ./libraries/contracts/
+COPY apps/server/ ./apps/server/
+RUN pnpm install -r
+
+# Build server
+RUN pnpm -r build
+
+# Deploy server
+RUN pnpm deploy --legacy --filter=@bus-tracker/server --prod server-deployment
+
+##########################################
+# STAGE 2 - Run distribution app         #
+##########################################
+
+FROM base AS runtime
+ENV NODE_ENV=production
+
+RUN apk add --no-cache tini curl
+
+# Copy project artifacts
+COPY --from=builder /bus-tracker/server-deployment/node_modules ./server/node_modules/
+COPY --from=builder /bus-tracker/server-deployment/drizzle ./server/drizzle/
+COPY --from=builder /bus-tracker/server-deployment/dist ./server/
+COPY --from=builder /bus-tracker/server-deployment/.env ./server/.env
+
+CMD ["/sbin/tini", "--", "node", "--env-file", "/bus-tracker/server/.env", "/bus-tracker/server/index.js"]

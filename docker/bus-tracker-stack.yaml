@@ -1,0 +1,118 @@
+version: '3.9'
+
+services:
+  traefik:
+    image: traefik:v3.6.9
+    command:
+      - "--providers.swarm=true"
+      - "--providers.swarm.exposedByDefault=false"
+      - "--entrypoints.web.address=:3000"
+      - "--accesslog=true"
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: host
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+
+  database:
+    image: postgres:18.3-alpine
+    environment:
+      - POSTGRES_USER=bustracker
+      - POSTGRES_PASSWORD_FILE=/run/secrets/database_password
+    ports:
+      - target: 5432
+        published: 5432
+        protocol: tcp
+        mode: host
+    secrets:
+      - database_password
+    volumes:
+      - database_data:/var/lib/postgresql
+
+  redis:
+    image: redis:8.6.1-alpine
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: host
+    volumes:
+      - redis_data:/data
+
+  server:
+    image: ghcr.io/kevinbioj/bus-tracker-2/server:sha-${GITHUB_SHA}
+    environment:
+      - DATABASE_URL=postgresql://bustracker:{PASSWORD_FILE}@database:5432/bustracker
+      - DATABASE_PASSWORD_FILE=/run/secrets/database_password
+      - REDIS_URL=redis://redis:6379
+    secrets:
+      - database_password
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.lbswarm=true"
+        - "traefik.http.routers.server.rule=PathPrefix(`/api/`)"
+        - "traefik.http.routers.server.entrypoints=web"
+        - "traefik.http.routers.server.middlewares=api-strip"
+        - "traefik.http.middlewares.api-strip.stripprefix.prefixes=/api/"
+        - "traefik.http.services.server.loadbalancer.server.port=8080"
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 10s
+        delay: 5s
+      rollback_config:
+        order: start-first
+    stop_grace_period: 10s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/ping"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+      start_period: 3s
+
+  client:
+    image: ghcr.io/kevinbioj/bus-tracker-2/client:sha-${GITHUB_SHA}
+    deploy:
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.lbswarm=true"
+        - "traefik.http.routers.client.rule=PathPrefix(`/`)"
+        - "traefik.http.routers.client.entrypoints=web"
+        - "traefik.http.services.client.loadbalancer.server.port=3000"
+      replicas: 1
+      update_config:
+        order: start-first
+        failure_action: rollback
+        monitor: 10s
+        delay: 5s
+      rollback_config:
+        order: start-first
+    stop_grace_period: 2s
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 1s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+
+secrets:
+  database_password:
+    name: bus-tracker_database-password
+    external: true
+
+volumes:
+  database_data:
+    name: bus-tracker_database-data
+    external: true
+
+  redis_data:
+    name: bus-tracker_redis-data
+    external: true

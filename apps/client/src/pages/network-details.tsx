@@ -1,0 +1,60 @@
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { Link, useParams } from "react-router-dom";
+
+import { GetNetworkQuery } from "~/api/networks";
+import { NetworkHeader } from "~/components/data/network-header";
+import { NetworkPage } from "~/components/data/networks/network-page";
+import {
+	Breadcrumb,
+	BreadcrumbItem,
+	BreadcrumbLink,
+	BreadcrumbList,
+	BreadcrumbPage,
+	BreadcrumbSeparator,
+} from "~/components/ui/breadcrumb";
+import { Separator } from "~/components/ui/separator";
+
+export function NetworkDetails() {
+	const { networkId } = useParams();
+	if (typeof networkId === "undefined") {
+		throw new Error("Expected networkId to be provided!");
+	}
+
+	const { data: network } = useSuspenseQuery(GetNetworkQuery(+networkId, true));
+
+	return (
+		<>
+			<title>{`${network.name} – Données – Bus Tracker`}</title>
+			<main className="p-3 pb-0 max-w-(--breakpoint-xl) w-full mx-auto">
+				<NetworkHeader network={network} />
+				<Breadcrumb>
+					<BreadcrumbList>
+						<BreadcrumbItem>
+							<BreadcrumbLink asChild>
+								<Link to="/data">Données</Link>
+							</BreadcrumbLink>
+						</BreadcrumbItem>
+						<BreadcrumbSeparator />
+						<BreadcrumbItem>
+							<BreadcrumbPage>
+								{network.logoHref ? (
+									<picture className="min-w-12 w-fit">
+										{network.darkModeLogoHref !== null ? (
+											<source srcSet={network.darkModeLogoHref} media="(prefers-color-scheme: dark)" />
+										) : null}
+										<img className="h-5 object-contain m-auto" src={network.logoHref} alt={network.name} />
+									</picture>
+								) : (
+									network.name
+								)}
+							</BreadcrumbPage>
+						</BreadcrumbItem>
+					</BreadcrumbList>
+				</Breadcrumb>
+				<Separator className="my-1" />
+				{/* <NetworkStatistics networkId={network.id} /> */}
+				<NetworkPage networkId={network.id} />
+			</main>
+		</>
+	);
+}

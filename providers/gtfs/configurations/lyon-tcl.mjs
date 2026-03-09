@@ -1,0 +1,56 @@
+/** @type {import('../src/model/source.ts').SourceOptions[]} */
+const sources = [
+	{
+		id: "tcl",
+		staticResourceHref: "https://gtfs.bus-tracker.fr/tcl.zip",
+		realtimeResourceHrefs: ["https://gtfs.bus-tracker.fr/gtfs-rt/tcl/"],
+		excludeScheduled: (trip) => !["SUBWAY", "FUNICULAR", "FERRY"].includes(trip.route.type),
+		mode: "NO-TU",
+		appendTripUpdateInformation: true,
+		getNetworkRef: () => "TCL",
+		getOperatorRef: (_, vehicle) => {
+			if (vehicle?.id) {
+				const [operatorRef] = vehicle.id.split(":");
+				if (operatorRef) {
+					return operatorRef;
+				}
+			}
+		},
+		getVehicleRef: (vehicle) => vehicle?.id.split(":")[1],
+	},
+	{
+		id: "transports-faure-28bi",
+		staticResourceHref: "https://pysae.com/api/v2/groups/transports-faure-28bi/gtfs/pub",
+		realtimeResourceHrefs: ["https://pysae.com/api/v2/groups/transports-faure-28bi/gtfs-rt"],
+		excludeScheduled: true,
+		mode: "NO-TU",
+		mapLineRef: (lineRef) => `FAURE-28BI ${lineRef}`,
+		getNetworkRef: () => "TCL",
+		getOperatorRef: () => "CARS_FAURE",
+		getVehicleRef: (vehicle) => vehicle?.label ?? undefined,
+	},
+	{
+		id: "cars-faure-tcl",
+		staticResourceHref: "https://pysae.com/api/v2/groups/cars-faure-tcl/gtfs/pub",
+		realtimeResourceHrefs: ["https://pysae.com/api/v2/groups/cars-faure-tcl/gtfs-rt"],
+		excludeScheduled: true,
+		mode: "NO-TU",
+		mapLineRef: (lineRef) => `FAURE-TCL ${lineRef}`,
+		getNetworkRef: () => "TCL",
+		getOperatorRef: () => "CARS_FAURE",
+		getVehicleRef: (vehicle) => vehicle?.label ?? undefined,
+	},
+];
+
+/** @type {import('../src/configuration/configuration.ts').Configuration} */
+const configuration = {
+	computeDelayMs: 10_000,
+	redisOptions: {
+		url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379",
+		username: process.env.REDIS_USERNAME,
+		password: process.env.REDIS_PASSWORD,
+	},
+	sources,
+};
+
+export default configuration;

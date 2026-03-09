@@ -1,0 +1,149 @@
+import { useQuery } from "@tanstack/react-query";
+import dayjs from "dayjs";
+import { ArchiveIcon } from "lucide-react";
+import { useMemo } from "react";
+import {
+	TbArrowRight as ArrowRightIcon,
+	TbCash as CashIcon,
+	TbEngine as EngineIcon,
+	TbFireExtinguisher as FireExtinguisherIcon,
+	TbSkull as SkullIcon,
+} from "react-icons/tb";
+import { Link } from "react-router-dom";
+import { match, P } from "ts-pattern";
+import { GetNetworkQuery } from "~/api/networks";
+
+import type { Vehicle } from "~/api/vehicles";
+import { useLine } from "~/hooks/use-line";
+import { BusIcon, CoachIcon, ShipIcon, TramwayIcon, TrolleybusIcon } from "~/icons/means-of-transport";
+import { Zzz } from "~/icons/zzz";
+
+export function VehicleCard({ vehicle }: Readonly<{ vehicle: Vehicle }>) {
+	const line = useLine(vehicle.networkId, vehicle.activity?.status === "online" ? vehicle.activity.lineId : undefined);
+	const { data: network } = useQuery(GetNetworkQuery(vehicle.networkId, true));
+
+	const activeLine = useMemo(() => {
+		if (vehicle.archivedAt !== null) {
+			return match(vehicle.archivedFor)
+				.with("FAILURE", () => <EngineIcon className="size-full" />)
+				.with("FIRE", () => <FireExtinguisherIcon className="size-full" />)
+				.with("RETIRED", () => <SkullIcon className="size-full" />)
+				.with("SOLD", () => <CashIcon className="size-full" />)
+				.with("TRANSFER", () => <ArrowRightIcon className="size-full" />)
+				.otherwise(() => <ArchiveIcon className="size-full" />);
+		}
+
+		if (typeof line === "undefined") return <Zzz className="h-full mx-auto" />;
+
+		return line.cartridgeHref ? (
+			<img className="h-full mx-auto object-contain" src={line.cartridgeHref} alt={line.number} />
+		) : (
+			<p className="flex items-center justify-center h-full font-bold text-2xl">{line.number}</p>
+		);
+	}, [line, vehicle]);
+
+	return (
+		<Link
+			className={`border border-border flex flex-col sm:flex-row py-1 px-2 rounded-md hover:brightness-90 ${
+				!line && "bg-neutral-200 text-black dark:bg-neutral-800 dark:text-white"
+			}`}
+			to={`/data/vehicles/${vehicle.id}`}
+			style={{
+				backgroundColor: line?.color ?? undefined,
+				color: line?.textColor ?? undefined,
+			}}
+		>
+			<div className="flex justify-center">
+				{match(vehicle.type)
+					.with(P.union("SUBWAY", "TRAMWAY"), () => (
+						<TramwayIcon className="my-auto size-6 sm:size-8" style={{ fill: line?.color ?? undefined }} />
+					))
+					.with("FERRY", () => (
+						<ShipIcon className="my-auto size-6 sm:size-8" style={{ fill: line?.color ?? undefined }} />
+					))
+					.with("TROLLEY", () => (
+						<TrolleybusIcon className="my-auto size-6 sm:size-8" style={{ fill: line?.color ?? undefined }} />
+					))
+					.with("COACH", () => (
+						<CoachIcon className="my-auto size-6 sm:size-8" style={{ fill: line?.color ?? undefined }} />
+					))
+					.otherwise(() => (
+						<BusIcon className="my-auto size-6 sm:size-8" style={{ fill: line?.color ?? undefined }} />
+					))}
+				<div
+					className="border-l border-black dark:border-white mx-2 my-1"
+					style={{ borderColor: line?.textColor ?? undefined }}
+				/>
+				<h2 className="flex font-bold gap-1.5 justify-center ml-1 tabular-nums text-2xl sm:my-auto sm:text-4xl sm:min-w-32">
+					{vehicle.number}
+				</h2>
+			</div>
+			<div
+				className="border-t sm:border-l border-black dark:border-white mx-2"
+				style={{ borderColor: line?.textColor ?? undefined }}
+			/>
+			<div className="flex gap-2 flex-1 mt-2 mx-2 sm:mt-0 sm:mx-0">
+				<div className="h-12 min-w-16 lg:max-w-36">{activeLine}</div>
+				<div className="flex flex-col justify-center">
+					{vehicle.designation && <p className="font-bold">{vehicle.designation}</p>}
+					{vehicle.activity?.status === "online" ? (
+						<p>
+							En circulation depuis{" "}
+							<span className="font-bold tabular-nums">
+								{dayjs(vehicle.activity.since).tz(network?.timezone).format("HH:mm")}
+							</span>
+						</p>
+					) : (
+						<p>
+							{vehicle.archivedAt ? (
+								<>
+									Archivé le{" "}
+									{dayjs().diff(vehicle.archivedAt, "years") >= 1 ? (
+										<span className="font-bold tabular-nums">
+											{dayjs(vehicle.archivedAt).tz(network?.timezone).format("DD/MM/YYYY")}
+										</span>
+									) : (
+										<>
+											<span className="font-bold tabular-nums">
+												{dayjs(vehicle.archivedAt).tz(network?.timezone).format("DD/MM")}
+											</span>{" "}
+											à{" "}
+											<span className="font-bold tabular-nums">
+												{dayjs(vehicle.archivedAt).tz(network?.timezone).format("HH:mm")}
+											</span>
+										</>
+									)}
+								</>
+							) : (
+								<>
+									Hors-ligne
+									{vehicle.activity.since !== null && (
+										<>
+											{" "}
+											depuis le{" "}
+											{dayjs().diff(vehicle.activity.since, "years") >= 1 ? (
+												<span className="font-bold tabular-nums">
+													{dayjs(vehicle.activity.since).tz(network?.timezone).format("DD/MM/YYYY")}
+												</span>
+											) : (
+												<>
+													<span className="font-bold tabular-nums">
+														{dayjs(vehicle.activity.since).tz(network?.timezone).format("DD/MM")}
+													</span>{" "}
+													à{" "}
+													<span className="font-bold tabular-nums">
+														{dayjs(vehicle.activity.since).tz(network?.timezone).format("HH:mm")}
+													</span>
+												</>
+											)}
+										</>
+									)}
+								</>
+							)}
+						</p>
+					)}
+				</div>
+			</div>
+		</Link>
+	);
+}
