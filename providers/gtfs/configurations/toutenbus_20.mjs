@@ -6,8 +6,8 @@ const sources = [
 		realtimeResourceHrefs: ["https://gtfs-rt.infra-hubup.fr/toutenbus/realtime"],
 		getNetworkRef: () => "TOUTENBUS",
 		getOperatorRef: () => "TOUTENBUS",
-		getVehicleRef: (vehicle) => vehicle?.id ?? vehicle?.label,
-		getDestination: (journey, vehicle) => vehicle?.label ?? journey?.calls.at(-1)?.stop.name,
+		getVehicleRef: (vehicle) => vehicle?.label,
+		getDestination: (journey) => journey?.calls.at(-1)?.stop.name,
 	},
 ];
 
