@@ -1,4 +1,4 @@
-## Creation of connector for ToutenBus netwoork, ingesting theorical and real-time GTFS files provided by authorities.
+## Creation of connector for ToutenBus network, ingesting theorical and real-time GTFS files provided by authorities.
 
 [![Logo](./documentation/images/logo-full-width.png)](https://bus-tracker.fr)
 
