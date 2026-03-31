@@ -1,3 +1,5 @@
+## Creation of connector for ToutenBus netwoork, ingesting theorical and real-time GTFS files provided by authorities.
+
 [![Logo](./documentation/images/logo-full-width.png)](https://bus-tracker.fr)
 
 [![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=bus-tracker-app&metric=alert_status)](https://sonarcloud.io/summary/new_code?id=bus-tracker-app)
